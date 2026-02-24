@@ -18,7 +18,7 @@ export async function createFeedback(params: CreateFeedbackParams) {
       .join("");
 
     const { object } = await generateObject({
-      model: google("gemini-2.0-flash-001", {
+      model: google("gemini-3-flash-preview", {
         structuredOutputs: false,
       }),
       schema: feedbackSchema,
@@ -30,9 +30,9 @@ export async function createFeedback(params: CreateFeedbackParams) {
         Please score the candidate from 0 to 100 in the following areas. Do not add categories other than the ones provided:
         - **Communication Skills**: Clarity, articulation, structured responses.
         - **Technical Knowledge**: Understanding of key concepts for the role.
-        - **Problem-Solving**: Ability to analyze problems and propose solutions.
-        - **Cultural & Role Fit**: Alignment with company values and job role.
-        - **Confidence & Clarity**: Confidence in responses, engagement, and clarity.
+        - **Problem Solving**: Ability to analyze problems and propose solutions.
+        - **Cultural Fit**: Alignment with company values and job role.
+        - **Confidence and Clarity**: Confidence in responses, engagement, and clarity.
         `,
       system:
         "You are a professional interviewer analyzing a mock interview. Your task is to evaluate the candidate based on structured categories",
@@ -62,7 +62,14 @@ export async function createFeedback(params: CreateFeedbackParams) {
     return { success: true, feedbackId: feedbackRef.id };
   } catch (error) {
     console.error("Error saving feedback:", error);
-    return { success: false };
+    if (error instanceof Error) {
+      console.error("Message:", error.message);
+      console.error("Stack:", error.stack);
+      return { success: false, error: error.message };
+    } else {
+      console.error("Full error object:", JSON.stringify(error, null, 2));
+      return { success: false, error: "Unknown error occurred" };
+    }
   }
 }
 
@@ -98,20 +105,13 @@ export async function getLatestInterviews(
   const interviews = await db
     .collection("interviews")
     .where("finalized", "==", true)
-    .limit(limit)
     .get();
 
   return interviews.docs
-    .filter((doc) => doc.data().userId !== userId)
-    .map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }))
-    .sort((a, b) => {
-      const aTime = (a as any).createdAt?.toMillis?.() ?? 0;
-      const bTime = (b as any).createdAt?.toMillis?.() ?? 0;
-      return bTime - aTime;
-    }) as Interview[];
+    .map((doc) => ({ id: doc.id, ...doc.data() } as Interview))
+    .filter((interview) => interview.userId !== userId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, limit);
 }
 
 export async function getInterviewsByUserId(
@@ -123,13 +123,6 @@ export async function getInterviewsByUserId(
     .get();
 
   return interviews.docs
-    .map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }))
-    .sort((a, b) => {
-      const aTime = (a as any).createdAt?.toMillis?.() ?? 0;
-      const bTime = (b as any).createdAt?.toMillis?.() ?? 0;
-      return bTime - aTime;
-    }) as Interview[];
+    .map((doc) => ({ id: doc.id, ...doc.data() } as Interview))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
